@@ -1,0 +1,456 @@
+loan_data<-read.csv("loan.csv",header = T,stringsAsFactors = F)
+
+# Data Cleaning
+
+ALL_NA_COL<-0 # ALL_NA_COL is the col which has only NA values
+for (Var in names(loan_data)){
+  missing_NA<-sum(is.na(loan_data[,Var]))
+  
+  if (missing_NA==nrow(loan_data)){
+    ALL_NA_COL<-1+ALL_NA_COL
+  }
+}
+print(ALL_NA_COL) # Prints total number of columns which contain only NA
+
+# Remove all those columns which contain only NA
+for (Var in names(loan_data)){
+  missing_NA<-sum(is.na(loan_data[,Var]))
+  
+  if (missing_NA==nrow(loan_data)){
+    loan_data[,Var]<-NULL
+  }
+}
+
+#  Data cleaning of Desc Col-Blanks values in Desc col are replaced with purpose
+for (des in 1:nrow(loan_data)){
+  if (loan_data$desc[des]==""){
+    loan_data$desc[des]<-loan_data$purpose[des]
+  }
+}
+
+
+# Remove columns which contain only 1 Value in all rows ,as only 1 value is of no use to analyze
+# pymnt_plan has only one  value "n" so this col can be removed
+loan_data$pymnt_plan<-NULL
+#initial_list_status has only one val so this col can be removed
+loan_data$initial_list_status<-NULL
+# collections_12_mths_ex_med has either 0 or na one val so this col can be removed
+loan_data$collections_12_mths_ex_med<-NULL 
+# policy_code has only value so this col can be removed
+loan_data$policy_code<-NULL
+# application_type has only one value so this col can be removed
+loan_data$application_type<-NULL
+
+
+# Removing percentage from interest rate
+loan_data[,"int_rate"] <- as.numeric(sub("%","",loan_data[,"int_rate"]))
+
+
+
+
+# Find Na values in remaining columns
+for (i in names(loan_data)) {
+  NA_Count <- sum(is.na(loan_data[,i]))
+  if ( NA_Count> 0) {
+    print(c(i,NA_Count))
+  }
+}
+
+sum(is.na(loan_data$mths_since_last_delinq))/nrow(loan_data)
+# Since 64 percent of the values are NA this col can be ignored for analysis
+
+sum(is.na(loan_data$mths_since_last_record))/nrow(loan_data)
+# Since 93 percent of the values are NA this col can be ignored for analysis
+
+sum(is.na(loan_data$chargeoff_within_12_mths))/nrow(loan_data)
+# Since 0.14 percent of the values are NA, we need not replace these NAs
+
+sum(is.na(loan_data$tax_liens))/nrow(loan_data)
+# Since 0.09 percent of the values are NA, we need not replace these NAs
+
+
+# Data cleaning for pub_rec_bankruptices:
+sum(is.na(loan_data$pub_rec_bankruptcies))/nrow(loan_data)
+#Since only 1.7 percent of the data contains NA values we can ignore NAs and
+# consider the data which does not contain NA for this column
+pub_rec_bankruptcies_without_NA<- dplyr::filter(loan_data,  !is.na(loan_data$pub_rec_bankruptcies)) # Data ignoring NA
+
+# Data Cleaning of emp_title
+loan_data$emp_title<-tolower(loan_data$emp_title)# As this column is in mixed case
+is.na(loan_data$emp_title) <- loan_data$emp_title == "" # replacing blanks in emp_title with NA
+
+# Data Cleaning of next_pymnt_d
+is.na(loan_data$next_pymnt_d)<-loan_data$next_pymnt_d=="" # replacing blanks with NA
+
+# Data cleaning of revol_util
+is.na(loan_data$revol_util)<-loan_data$revol_util=="" # replacing blanks with NA
+
+
+# Data cleaning of title
+loan_data$title<-tolower(loan_data$title)# As this column is in mixed case
+# Data cleaning of title-Blank values are replaced with na
+is.na(loan_data$title)<-loan_data$title==""
+
+# Spelling mistake-(personel instead of personal) detected in title col
+# Correction of spelling in title col
+library(stringr)
+p<-which(loan_data$title=="personel")
+for (t in 1:length(p)){
+   loan_data$title[p[t]]<-str_replace("personel","nel","nal")
+}
+
+# Spelling mistake-(personnel loan instead of personal) detected in title col
+# Correction of spelling in title col -from personnel loan to personal
+p1<-which(loan_data$title=="personnel loan")
+for (t in 1:length(p1)){
+  loan_data$title[p1[t]]<-str_replace("personnel loan","nnel loan","nal")
+}
+
+# there are rows with values personal loan which is same as personal
+# conversion of personal loan to personal
+
+p2<-which(loan_data$title=="personal loan")
+for (t in 1:length(p2)){
+  loan_data$title[p2[t]]<-sub(" .*", "", loan_data$title[p2[t]])
+}
+
+# Formatting date columns
+#Issue date: As per the data dictionary, issue_d is the month in which loan was
+# funded so we extracted month from issue date for analysis
+
+loan_data$issue_d<-gsub(".*-","",loan_data$issue_d)
+
+# Earlest_cr_line
+library(lubridate)
+loan_data$earliest_cr_line<-month(as.POSIXlt(loan_data$earliest_cr_line, format="%d/%m/%Y"))
+
+# Loan status analysis-Univariate
+
+library(ggplot2)
+ggplot(loan_data,aes(x=loan_status))+geom_bar()+geom_text(stat='count',aes(label=..count..,size = 1, hjust = 0.1, vjust = 0.1))
+
+fully_paid<-subset(loan_data,loan_data$loan_status=="Fully Paid")
+Current<-subset(loan_data,loan_data$loan_status=="Current")
+Charged_off<-subset(loan_data,loan_data$loan_status=="Charged Off")
+
+#  Segmented Univariate Analysis
+# 1.Impact of purpose of loan on loan_status
+
+
+freq_purpose<-ggplot(loan_data,aes(x=loan_status, fill=purpose))+geom_bar()
+
+freq_purpose
+
+# From the above plot we can say that members applying loan for debt consolidation 
+# contribute the most to defaulters list 
+
+# 2.Impact of verification of loan on loan_status
+
+freq_verify<-ggplot(loan_data,aes(x=loan_status,fill=verification_status))+geom_bar()
+freq_verify
+
+# Since the proportion of defaulters is similar in all the cases, the varaible verification_status
+# has no significant impact on the loan_status
+
+# 3. Impact of Home ownership on loan status
+
+freq_home<-ggplot(loan_data,aes(x=home_ownership,fill=loan_status))+geom_bar()
+freq_home
+
+# Members who rent or mortagage the house are the more likely to default
+
+# 4. Impact of loan amount on loan status
+
+# Derived a column based on the range of loan amount
+for (n in 1:nrow(loan_data)){
+  if ( loan_data$loan_amnt[n]<5000) {
+    loan_data$range_loan[n]<-"Below 5000"
+  } else if (( loan_data$loan_amnt[n]>=5000) & (loan_data$loan_amnt[n]<10000)) {
+    loan_data$range_loan[n]<-"Between 5000 and 10000"
+  } else if (( loan_data$loan_amnt[n]>=10000) & (loan_data$loan_amnt[n]<15000)) {
+    loan_data$range_loan[n]<-"Bwn 10000 and 15000"
+  } else if ((loan_data$loan_amnt[n]>=15000) & (loan_data$loan_amnt[n]<20000)){
+    loan_data$range_loan[n]<-"Bwn 15000 and 20000"
+  } else if ((loan_data$loan_amnt[n]>=20000) & (loan_data$loan_amnt[n]<250000)){
+    loan_data$range_loan[n]<-"Bwn 20000 and 25000"
+  } else if ((loan_data$loan_amnt[n]>=25000) & (loan_data$loan_amnt[n]<30000)){
+    loan_data$range_loan[n]<-"Bwn 25000 and 30000"
+  }else{
+    loan_data$range_loan[n]<-"Greater than 30000"
+  }
+}
+
+freq_loan_amnt<-ggplot(loan_data,aes(x=range_loan,fill=loan_status))+geom_bar()
+freq_loan_amnt
+
+# From the above plot we can say that members applying loan amounts between 5000 and 10000 are likely to default
+
+# 5. Impact of term of loan on loan status
+freq_term<-ggplot(loan_data,aes(x=term,fill=loan_status))+geom_bar(position = "dodge")
+freq_term
+
+#From the above plot we can say that members opting for 36 months are more likely to default
+
+# 6. Impact of monthly installment on loan status
+
+summary(loan_data$installment)
+
+# Derived a column based on range of installment
+for (m in 1:nrow(loan_data)){
+  if ( loan_data$installment[m]<250) {
+    loan_data$range_installment[m]<-"Below 250"
+  } else if (( loan_data$installment[m]>=250) & (loan_data$installment[m]<500)) {
+    loan_data$range_installment[m]<-"Between 250 and 500"
+  } else if (( loan_data$installment[m]>=500) & (loan_data$installment[m]<750)) {
+    loan_data$range_installment[m]<-"Bwn 500 and 750"
+  } else if ((loan_data$installment[m]>=750) & (loan_data$installment[m]<1000)){
+    loan_data$range_installment[m]<-"Bwn 750 and 1000"
+  } else if ((loan_data$installment[m]>=1000) & (loan_data$installment[m]<1250)){
+    loan_data$range_installment[m]<-"Bwn 1000 and 1250"
+  }else{
+    loan_data$range_installment[m]<-"Greater than 1250"
+  }
+}
+
+freq_installment<-ggplot(loan_data,aes(x=range_installment,fill=loan_status))+geom_bar(position = "dodge")
+freq_installment
+
+# People paying an installment below 500 are more likely to default
+
+
+# 7. Impact of emp length on loan status
+# Data cleaning of emp length
+for (exp in 1:nrow(loan_data)){
+  if ( loan_data$emp_length[exp]=="< 1 year") {
+    loan_data$emp_length[exp]<-"0"
+  } else if ( loan_data$emp_length[exp]=="1 year") {
+    loan_data$emp_length[exp]<-"1"
+  } else if ( loan_data$emp_length[exp]=="2 years") {
+    loan_data$emp_length[exp]<-"2"
+  } else if ( loan_data$emp_length[exp]=="3 years") {
+    loan_data$emp_length[exp]<-"3"
+  } else if ( loan_data$emp_length[exp]=="4 years") {
+    loan_data$emp_length[exp]<-"4"
+  } else if ( loan_data$emp_length[exp]=="5 years") {
+    loan_data$emp_length[exp]<-"5"
+  } else if ( loan_data$emp_length[exp]=="6 years") {
+    loan_data$emp_length[exp]<-"6"
+  } else if ( loan_data$emp_length[exp]=="7 years") {
+    loan_data$emp_length[exp]<-"7"
+  } else if ( loan_data$emp_length[exp]=="8 years") {
+    loan_data$emp_length[exp]<-"8"
+  } else if ( loan_data$emp_length[exp]=="9 years") {
+    loan_data$emp_length[exp]<-"9"
+  } else if (( loan_data$emp_length[exp]=="10+ years") |(loan_data$emp_length[exp]=="10 years")) {
+    loan_data$emp_length[exp]<-"10"
+  }else{
+    loan_data$emp_length[exp]<-"not considered"
+  }
+}
+
+freq_emplen<-ggplot(loan_data,aes(x=emp_length,fill=loan_status))+geom_bar()
+freq_emplen
+
+# Members having an experience of 10 years are more likely to default
+
+# 8. Impact of interest rate on loan status
+summary(loan_data$int_rate)
+# Derived column based on range of interest
+for (int in 1:nrow(loan_data)){
+  if ( loan_data$int_rate[int]<5) {
+    loan_data$range_int[int]<-"Below 5"
+  } else if (( loan_data$int_rate[int]>=5) & (loan_data$int_rate[int]<10)) {
+    loan_data$range_int[int]<-"Between 5 and 10"
+  } else if (( loan_data$int_rate[int]>=10) & (loan_data$int_rate[int]<15)) {
+    loan_data$range_int[int]<-"Bwn 10 and 15"
+  } else if ((loan_data$int_rate[int]>=15) & (loan_data$int_rate[int]<20)){
+    loan_data$range_int[int]<-"Bwn 15 and 20"
+  }else{
+    loan_data$range_int[int]<-"Greater than 20"
+  }
+}
+
+
+freq_rateofint<-ggplot(loan_data,aes(x=range_int,fill=loan_status))+geom_bar()
+freq_rateofint
+# From the above plot we can see that members who fall in the interest group of
+# 10 to 15 are more likely to default
+
+# 9. Impact of grade on loan status
+
+freq_grade<-ggplot(loan_data,aes(x=grade,fill=loan_status))+geom_bar()
+freq_grade
+
+# So members from B grade are more likely to default
+
+# 10. Impact of address of the borrower on the loan status
+
+freq_address<-ggplot(loan_data,aes(x=addr_state,fill=loan_status))+geom_bar()
+freq_address
+# From the plot it is clear that more number of borrowers
+# from the state CA are appearing as defaulters
+
+
+
+
+#11. Impact of delinq_2yrs on loan status
+freq_delinq<-ggplot(loan_data,aes(x=delinq_2yrs,fill=loan_status))+geom_bar()
+freq_delinq
+
+# from the plot it is clear that the number of 30+ days past-due incidences of delinquency 
+#in the borrower's credit file for the past 2 years has no impact as the count of defaults 
+
+
+
+#12. Impact of open accounts on loan status
+freq_open_acc<-ggplot(loan_data,aes(x=open_acc,fill=loan_status))+geom_bar()
+freq_open_acc
+# Count of open accounts has no significance to loan status
+
+# 13. Impact of pub_rec_bankruptcies on loan status
+
+
+freq_bankruptcies<-ggplot(pub_rec_bankruptcies_without_NA,aes(x=pub_rec_bankruptcies,fill=loan_status))+geom_bar()
+freq_bankruptcies
+
+# Memebers having 0 bankruptices are more likely to default
+
+# 14. Impact of annual income on loan status
+hist(loan_data$annual_inc)
+summary(loan_data$annual_inc)
+# As more than 36000 records fall within 1 lakh range, bin ranges below 1 lakh are considered
+
+
+for (inc in 1:nrow(loan_data)){
+  if ( loan_data$annual_inc[inc]<35000) {
+    loan_data$range_income[inc]<-"Below 35k"
+  } else if (( loan_data$annual_inc[inc]>=35000) & (loan_data$annual_inc[inc]<70000)) {
+    loan_data$range_income[inc]<-"Bwn 35k and 70k"
+  } else if (( loan_data$annual_inc[inc]>=70000) & (loan_data$annual_inc[inc]<100000)) {
+    loan_data$range_income[inc]<-"Bwn 70k and 100k"
+  }else{
+    loan_data$range_income[inc]<-"Greater than 1 lakh"
+  }
+}
+
+freq_income<-ggplot(loan_data[loan_data$annual_inc<100000,],aes(x=range_income,fill=loan_status))+geom_bar()
+freq_income
+# So members earning bwn 35k to 70k are more likely to be defaulters
+
+# 15. Impact of issue_d on loan status
+
+freq_issuedate<-ggplot(loan_data,aes(x=issue_d,fill=loan_status))+geom_bar()
+freq_issuedate
+
+# Members for whom the loan issued month is Dec are more likely to default
+
+# 16. Impact of earliest cr line on loan status
+freq_ear_cr<-ggplot(loan_data,aes(x=earliest_cr_line,fill=loan_status))+geom_bar()
+freq_ear_cr
+
+# Members for whom the earliest credit line opened was in January are more likelt to default
+
+# 17. Impact of inq_last_6mths on loan status
+
+freq_inq_6_mths<-ggplot(loan_data,aes(x=inq_last_6mths,fill=loan_status))+geom_bar()
+freq_inq_6_mths
+
+# People who have been inquired 0 times are more likely to default
+
+# From univariate analysis we identified the below 5 variables are strong evidences for defualters
+
+#1. purpose
+#2. home ownershio
+#3. annual income
+#4. loan amount
+#5. emp length
+
+#Bivariate Analysis:
+#1. purpose (Debt Consolidation) of loan with home onwership
+# As we found that max no of defaulters are from debt consolidation group
+
+freq_debt_cons<-ggplot(loan_data[loan_data$purpose=="debt_consolidation",],aes(x=purpose,fill=loan_status))+geom_bar()
+freq_debt_home<-freq_debt_cons+facet_wrap(~home_ownership)
+freq_debt_home
+
+# From the plot we can conclude that a combination of debt_consolidation and rental
+# is one of the evidences which leads to default
+
+# 2. purpose with loan amont
+freq_debt_loan<-freq_debt_cons+facet_wrap(~range_loan)
+freq_debt_loan
+
+# We can conclude that a combination of debt consolidation and a loan range of 5k to 10k
+# is one of the evidences which leads to default
+
+# 3. purpose with emp length
+freq_debt_exp<-freq_debt_cons+facet_wrap(~emp_length)
+freq_debt_exp
+# We can conclude that a combination of debt consolidation and a emp experience of 10 yrs
+# is one of the evidences which leads to default
+
+
+#4. purpose with annual income
+
+freq_debt_income<-freq_debt_cons+facet_wrap(~range_income)
+freq_debt_income
+# We can conclude that a combination of debt consolidation and annual income between range 35k to 70k
+# is one of the evidences which leads to default
+
+# 5. home onwership ( Rent and Mortagage) with annual income
+
+freq_RENT<-ggplot(loan_data[loan_data$home_ownership=="RENT",],aes(x=home_ownership,fill=loan_status))+geom_bar()
+freq_Rent_income<-freq_RENT+facet_wrap(~range_income)
+freq_Rent_income
+
+freq_MORT<-ggplot(loan_data[loan_data$home_ownership=="MORTGAGE",],aes(x=home_ownership,fill=loan_status))+geom_bar()
+freq_Mort_income<-freq_MORT+facet_wrap(~range_income)
+freq_Mort_income
+#We can conclude that a combination of rent/mortgage and annual income bwn 35k to 70k
+# is one of the evidences which leads to default
+
+# 6.home ownership with loan amount
+
+freq_Rent_loan<-freq_RENT+facet_wrap(~range_loan)
+freq_Rent_loan
+
+freq_Mort_loan<-freq_MORT+facet_wrap(~range_loan)
+freq_Mort_loan
+
+# We can conclude that a combination of rent and loan  bwn 5k to 10k , combination
+#of mortgage and loan between 20k and 25k is one the evidences which leads to default
+
+# 7. home ownership with experience
+
+freq_Rent_emp<-freq_RENT+facet_wrap(~emp_length)
+freq_Rent_emp
+
+freq_Mort_emp<-freq_MORT+facet_wrap(~emp_length)
+freq_Mort_emp
+# We can conclude that a combination of rent/mortgage  and experience with 10+
+# is one the evidences which leads to default
+
+#8. annual income with loan amount
+freq_income_35to70<-ggplot(loan_data[loan_data$range_income=="Bwn 35k and 70k",],aes(x=range_income,fill=loan_status))+geom_bar()
+
+freq_income35to70_loan<-freq_income_35to70+facet_wrap(~range_loan)
+freq_income35to70_loan
+
+# We can conclude that a annual income bwn 35k to 70k  and loan bwn 5k to 10k
+# is one the evidences which leads to default
+
+
+#9. annual income with experience
+
+freq_income_35to70_exp<-freq_income_35to70+facet_wrap(~emp_length)
+freq_income_35to70_exp
+# We can conclude that a annual income bwn 35k to 70k  and exp of 10+ yrs
+# is one the evidences which leads to default
+
+# 10.loan amount with experience
+freq_loan_5to10<-ggplot(loan_data[loan_data$range_loan=="Between 5000 and 10000",],aes(x=range_loan,fill=loan_status))+geom_bar()
+freq_loan_5to10_exp<-freq_loan_5to10+facet_wrap(~emp_length)
+freq_loan_5to10_exp
+
+# We can conclude that a loan amt bwn 5k to 10k  and exp of 10+ yrs
+# is one the evidences which leads to default
